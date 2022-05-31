@@ -85,9 +85,6 @@ class Card(STFObject):
 class Deck(STFArray):
     T: type = Card
 
-    def __init__(self, iterable: Iterable[Card]) -> None:
-        super().__init__(iterable)
-
     @classmethod
     def get_random(cls) -> "Deck":
         deck = list(Card.get_all())
