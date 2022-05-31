@@ -9,14 +9,6 @@ import hashlib
 __all__ = ["Configuration", "STFObject", "STFArray", "ByteStream", "SerializedTreeFile"]
 
 
-def echo(functor):
-    def wrap(*_, **__):
-        r = functor(*_, **__)
-        print(functor, _, __, ">", r)
-        return r
-    return wrap
-
-
 class Configuration:
     BOOL_SIZE: int = 1
     METADATA_LENGTH: int = 3
