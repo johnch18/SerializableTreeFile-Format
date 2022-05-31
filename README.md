@@ -1,0 +1,1 @@
+A file format I came up with. Not terribly novel but fun nonetheless.
