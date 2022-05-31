@@ -270,30 +270,30 @@ class STFObject(ABC):
         return ByteStream()
 
 
-class STFArray(list, STFObject):
+class STFArray(list, STFObject, ABC):
     """
     Stores multiple of a single type
     """
     MAX_ELEMS: int = 2
+    T: type = None
 
-    def __init__(self, iterable: Iterable[Any], T: Type = object) -> None:
+    def __init__(self, iterable: Iterable[Any]) -> None:
         """
         Init list and save type
         """
         super().__init__(iterable)
-        self.__T = T
 
     @classmethod
-    def deserialize(cls, data: ByteStream, *args, T: Type = object, **kwargs) -> "STFObject":
+    def deserialize(cls, data: ByteStream, *args, **kwargs) -> "STFObject":
         """
         Deserialize array
         """
         header = cls.read_header(data)
         num_elems = header.metadata.read_int(length=STFArray.MAX_ELEMS)
-        result = STFArray(iterable=tuple(), T=T)
+        result = cls(iterable=tuple())
         for i in range(num_elems):
-            result.append(data.deconvert(*args, T=T, **kwargs))
-        return cls(result)
+            result.append(data.deconvert(*args, T=cls.T, **kwargs))
+        return result
 
     def data(self, *args, **kwargs) -> ByteStream:
         """

@@ -83,14 +83,10 @@ class Card(STFObject):
 
 
 class Deck(STFArray):
+    T: type = Card
 
-    def __init__(self, iterable: Iterable[Card], T: Type = Card) -> None:
-        super().__init__(iterable, T)
-
-    @classmethod
-    def deserialize(cls, data: ByteStream, *args, T: Type = Card, **kwargs) -> "STFObject":
-        # _ = cls.read_header(data)
-        return super().deserialize(data, *args, T=T, **kwargs)
+    def __init__(self, iterable: Iterable[Card]) -> None:
+        super().__init__(iterable)
 
     @classmethod
     def get_random(cls) -> "Deck":
