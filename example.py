@@ -90,7 +90,7 @@ class Deck(STFArray):
     @classmethod
     def deserialize(cls, data: ByteStream, *args, T: Type = Card, **kwargs) -> "STFObject":
         # _ = cls.read_header(data)
-        return Deck(super().deserialize(data, *args, T=T, **kwargs))
+        return super().deserialize(data, *args, T=T, **kwargs)
 
     @classmethod
     def get_random(cls) -> "Deck":

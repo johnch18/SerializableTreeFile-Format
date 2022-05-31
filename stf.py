@@ -293,7 +293,7 @@ class STFArray(list, STFObject):
         result = STFArray(iterable=tuple(), T=T)
         for i in range(num_elems):
             result.append(data.deconvert(*args, T=T, **kwargs))
-        return result
+        return cls(result)
 
     def data(self, *args, **kwargs) -> ByteStream:
         """
