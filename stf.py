@@ -226,12 +226,10 @@ class ByteStream(bytearray):
         Prints a hex dump of the bytes
         """
         result = str()
-        i = 0
-        for byte in self[index:]:
+        for index, byte in enumerate(self[index:]):
             result += f"{byte:02x} "
-            if i % width == width - 1:
+            if index % width == width - 1:
                 result += "\n"
-            i += 1
         return result
 
 
