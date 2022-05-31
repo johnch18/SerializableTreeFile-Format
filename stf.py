@@ -1,10 +1,10 @@
 #!/usr/bin/python3.11
 
 
+import hashlib
 # Imports
 from abc import ABC, abstractmethod
-from typing import Iterable, NamedTuple, Any, Type, IO
-import hashlib
+from typing import NamedTuple, Any, Type, IO
 
 __all__ = ["Configuration", "STFObject", "STFArray", "ByteStream", "SerializedTreeFile"]
 
@@ -33,7 +33,7 @@ class Configuration:
     VERSION: int = 0x00000003
 
     @classmethod
-    def MASK(cls, length: int) -> int:
+    def mask_bits(cls, length: int) -> int:
         """
         Filters the lower 'length' bits of an int
         """
@@ -42,7 +42,8 @@ class Configuration:
 
 class ByteStream(bytearray):
     """
-    Subclass of the default bytearray that implements convenient methods for adding/reading values from a binary array
+    Subclass of the default bytearray that implements convenient
+    methods for adding/reading values from a binary array
     """
 
     def __init__(self, *args, initial_position: int = 0, old_array: bytearray = None, **kwargs):
@@ -69,7 +70,7 @@ class ByteStream(bytearray):
 
     def length(self) -> int:
         """
-        Current length
+        Gets length of data
         """
         return len(self)
 
@@ -86,12 +87,18 @@ class ByteStream(bytearray):
         new_position = self.__position + length
         # Check for over-read
         if new_position > self.length():
-            raise IndexError(f"Read beyond length of data. Attempted to read {length} bytes starting at {self.position()}, {new_position} > {self.length()}")
+            raise IndexError(f"Read beyond length of data. Attempted to read {length} bytes" \
+                             " starting at {self.position()}, {new_position} > {self.length()}")
         new_segment = ByteStream(old_array=self[self.__position: new_position])
         self.__position = new_position
         return new_segment
 
-    def read_int(self, length: int = Configuration.INT_SIZE, byteorder: str = Configuration.ENDIANNESS, signed: bool = False):
+    def read_int(
+            self,
+            length: int = Configuration.INT_SIZE,
+            byteorder: str = Configuration.ENDIANNESS,
+            signed: bool = False
+    ):
         """
         Reads an integer
         """
@@ -103,12 +110,11 @@ class ByteStream(bytearray):
         """
         if length > 0:
             return self.read(length).decode(encoding=encoding)
-        else:
-            zero_index = self.index(0x00, self.__position) - self.__position
-            s = self.read_str(zero_index)
-            # Ignore zero
-            self.read(1)
-            return s
+        zero_index = self.index(0x00, self.__position) - self.__position
+        result = self.read_str(zero_index)
+        # Ignore zero
+        self.read(1)
+        return result
 
     def read_bool(self) -> bool:
         """
@@ -122,13 +128,24 @@ class ByteStream(bytearray):
         """
         self.extend(data)
 
-    def write_int(self, value: int, byteorder: str = Configuration.ENDIANNESS, length: int = Configuration.INT_SIZE, signed: bool = False) -> None:
+    def write_int(
+            self,
+            value: int,
+            byteorder: str = Configuration.ENDIANNESS,
+            length: int = Configuration.INT_SIZE,
+            signed: bool = False
+    ) -> None:
         """
         Writes an int
         """
         self.write(value.to_bytes(length=length, byteorder=byteorder, signed=signed))
 
-    def write_str(self, value: str, zero_terminated=Configuration.ZERO_TERMINATE, encoding: str = Configuration.ENCODING) -> None:
+    def write_str(
+            self,
+            value: str,
+            zero_terminated=Configuration.ZERO_TERMINATE,
+            encoding: str = Configuration.ENCODING
+    ) -> None:
         """
         Writes string
         """
@@ -136,7 +153,13 @@ class ByteStream(bytearray):
             value += "\0"
         self.write(value.encode(encoding))
 
-    def write_bool(self, value: bool, length: int = Configuration.BOOL_LENGTH, byteorder: str = Configuration.ENDIANNESS, signed: bool = False) -> None:
+    def write_bool(
+            self,
+            value: bool,
+            length: int = Configuration.BOOL_LENGTH,
+            byteorder: str = Configuration.ENDIANNESS,
+            signed: bool = False
+    ) -> None:
         """
         Writes a bool
         """
@@ -150,7 +173,8 @@ class ByteStream(bytearray):
         hasher = hashlib.sha256()
         hasher.update(self)
         digest = hasher.digest()
-        hashed = int.from_bytes(digest, Configuration.ENDIANNESS) & Configuration.MASK(Configuration.INT_SIZE * 8)
+        hashed = int.from_bytes(digest, Configuration.ENDIANNESS) &\
+                 Configuration.mask_bits(Configuration.INT_SIZE * 8)
         return hashed
 
     @classmethod
@@ -171,20 +195,19 @@ class ByteStream(bytearray):
             raise TypeError(f"Unknown type {type(item).__name__}")
         return result
 
-    def deconvert(self, T: Type = object, *args, **kwargs) -> Any:
+    def deconvert(self,  *args, target_type: Type = object, **kwargs) -> Any:
         """
         Converts bytes to a type
         """
-        if issubclass(T, STFObject):
-            return T.deserialize(self)
-        elif issubclass(T, int):
+        if issubclass(target_type, STFObject):
+            return target_type.deserialize(self)
+        if issubclass(target_type, int):
             return self.read_int(*args, **kwargs)
-        elif issubclass(T, str):
+        if issubclass(target_type, str):
             return self.read_str(*args, **kwargs)
-        elif issubclass(T, bool):
+        if issubclass(target_type, bool):
             return self.read_bool()
-        else:
-            raise TypeError(f"Unknown type {T.__name__}")
+        raise TypeError(f"Unknown type {target_type.__name__}")
 
     def display(self, width: int = 8, index: int = 0) -> str:
         """
@@ -192,8 +215,8 @@ class ByteStream(bytearray):
         """
         result = str()
         i = 0
-        for b in self[index:]:
-            result += f"{b:02x} "
+        for byte in self[index:]:
+            result += f"{byte:02x} "
             if i % width == width - 1:
                 result += "\n"
             i += 1
@@ -254,14 +277,12 @@ class STFObject(ABC):
         """
         Returns an object from bytes
         """
-        pass
 
     @abstractmethod
     def data(self, *args, **kwargs) -> ByteStream:
         """
         Gets bytes of data
         """
-        pass
 
     def metadata(self) -> ByteStream:
         """
@@ -277,12 +298,6 @@ class STFArray(list, STFObject, ABC):
     MAX_ELEMS: int = 2
     T: type = None
 
-    def __init__(self, iterable: Iterable[Any]) -> None:
-        """
-        Init list and save type
-        """
-        super().__init__(iterable)
-
     @classmethod
     def deserialize(cls, data: ByteStream, *args, **kwargs) -> "STFObject":
         """
@@ -291,8 +306,8 @@ class STFArray(list, STFObject, ABC):
         header = cls.read_header(data)
         num_elems = header.metadata.read_int(length=STFArray.MAX_ELEMS)
         result = cls(iterable=tuple())
-        for i in range(num_elems):
-            result.append(data.deconvert(*args, T=cls.T, **kwargs))
+        for _ in range(num_elems):
+            result.append(data.deconvert(*args, target_type=cls.T, **kwargs))
         return cls(result)
 
     def data(self, *args, **kwargs) -> ByteStream:
@@ -330,7 +345,7 @@ class SerializedTreeFile:
         """
         Opens file
         """
-        self.file = open(self.filename, self.mode)
+        self.file = open(self.filename, self.mode, encoding=Configuration.ENCODING)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
@@ -349,7 +364,7 @@ class SerializedTreeFile:
         data.write(obj.serialize(*args, **kwargs))
         self.file.write(data)
 
-    def read(self, T: Type[STFObject], *args, **kwargs) -> STFObject:
+    def read(self, target_type: Type[STFObject], *args, **kwargs) -> STFObject:
         """
         Reads object from file
         """
@@ -360,14 +375,16 @@ class SerializedTreeFile:
             raise Exception("Incorrect Magic Number")
         if version != Configuration.VERSION:
             raise Exception("Incorrect Version")
-        return T.deserialize(data, *args, **kwargs)
+        return target_type.deserialize(data, *args, **kwargs)
 
 
 # Testing
 
 
 def main():
-    pass
+    """
+    Entry point for testing
+    """
 
 
 if __name__ == "__main__":
