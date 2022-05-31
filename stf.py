@@ -1,5 +1,9 @@
 #!/usr/bin/python3.11
 
+"""
+stf.py
+"""
+
 
 import hashlib
 # Imports
@@ -38,6 +42,14 @@ class Configuration:
         Filters the lower 'length' bits of an int
         """
         return (1 << length) - 1
+
+    @classmethod
+    def version_validation(cls, version: int) -> bool:
+        """
+        Checks if versions are compatible
+        TODO: Needs some work
+        """
+        return version == cls.VERSION
 
 
 class ByteStream(bytearray):
@@ -284,11 +296,11 @@ class STFObject(ABC):
         Gets bytes of data
         """
 
+    @abstractmethod
     def metadata(self) -> ByteStream:
         """
         Gets metadata
         """
-        return ByteStream()
 
 
 class STFArray(list, STFObject, ABC):
