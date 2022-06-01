@@ -221,12 +221,12 @@ class ByteStream(bytearray):
             return self.read_bool()
         raise TypeError(f"Unknown type {target_type.__name__}")
 
-    def display(self, width: int = 8, index: int = 0) -> str:
+    def display(self, width: int = 8, index_start: int = 0) -> str:
         """
         Prints a hex dump of the bytes
         """
         result = str()
-        for index, byte in enumerate(self[index:]):
+        for index, byte in enumerate(self[index_start:]):
             result += f"{byte:02x} "
             if index % width == width - 1:
                 result += "\n"
