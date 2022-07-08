@@ -37,16 +37,26 @@ class Card(STFObject):
         Queen = auto()
         King = auto()
 
+        def __str__(self) -> str:
+            if self.value == Card.Rank.Ace.value:
+                return "A"
+            elif self.value < Card.Rank.Jack.value:
+                return str(self.value + 1)
+            else:
+                return self.name[0]
+
         @classmethod
         def get_random(cls) -> "Card.Rank":
             return Card.Rank(random.randint(0, 13))
+
+    SYMBOLS = "\u2665\u2664\u2667\u2666"
 
     def __init__(self, suit: Suit, rank: Rank) -> None:
         self.suit = suit
         self.rank = rank
 
     def __str__(self) -> str:
-        return f"{self.rank.name} of {self.suit.name}"
+        return f"{str(self.rank)}{Card.SYMBOLS[self.suit.value]}"
 
     def __repr__(self) -> str:
         return str(self)
@@ -100,8 +110,11 @@ def main():
     deck = Deck.get_random()
     print("Before:")
     pp(deck)
+    print()
+    #
     with SerializedTreeFile("deck.stf", "wb") as STF:
         STF.write(deck)
+    #
     with SerializedTreeFile("deck.stf", "rb") as STF:
         new_deck = STF.read(Deck)
     print("After:")
