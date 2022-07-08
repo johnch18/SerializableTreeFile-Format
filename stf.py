@@ -4,9 +4,8 @@
 stf.py
 """
 
-
-import hashlib
 # Imports
+import hashlib
 from abc import ABC, abstractmethod
 from typing import NamedTuple, Any, Type, IO
 
@@ -185,7 +184,7 @@ class ByteStream(bytearray):
         hasher = hashlib.sha256()
         hasher.update(self)
         digest = hasher.digest()
-        hashed = int.from_bytes(digest, Configuration.ENDIANNESS) &\
+        hashed = int.from_bytes(digest, Configuration.ENDIANNESS) & \
                  Configuration.mask_bits(Configuration.INT_SIZE * 8)
         return hashed
 
@@ -207,7 +206,7 @@ class ByteStream(bytearray):
             raise TypeError(f"Unknown type {type(item).__name__}")
         return result
 
-    def deconvert(self,  *args, target_type: Type = object, **kwargs) -> Any:
+    def deconvert(self, *args, target_type: Type = object, **kwargs) -> Any:
         """
         Converts bytes to a type
         """
@@ -315,7 +314,7 @@ class STFArray(list, STFObject, ABC):
         """
         header = cls.read_header(data)
         num_elems = header.metadata.read_int(length=STFArray.MAX_ELEMS)
-        result = cls(iterable=tuple())
+        result = cls(tuple())
         for _ in range(num_elems):
             result.append(data.deconvert(*args, target_type=cls.T, **kwargs))
         return cls(result)
@@ -355,7 +354,7 @@ class SerializedTreeFile:
         """
         Opens file
         """
-        self.file = open(self.filename, self.mode, encoding=Configuration.ENCODING)
+        self.file = open(self.filename, self.mode)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:

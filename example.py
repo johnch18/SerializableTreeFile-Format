@@ -81,6 +81,9 @@ class Card(STFObject):
             for rank in Card.Rank:
                 yield Card(suit, rank)
 
+    def metadata(self) -> ByteStream:
+        return ByteStream()
+
 
 class Deck(STFArray):
     T: type = Card
@@ -93,14 +96,16 @@ class Deck(STFArray):
 
 
 def main():
+    from pprint import pprint as pp
     deck = Deck.get_random()
-    print(deck)
+    print("Before:")
+    pp(deck)
     with SerializedTreeFile("deck.stf", "wb") as STF:
         STF.write(deck)
-    #
     with SerializedTreeFile("deck.stf", "rb") as STF:
         new_deck = STF.read(Deck)
-    print(new_deck)
+    print("After:")
+    pp(new_deck)
 
 
 if __name__ == "__main__":

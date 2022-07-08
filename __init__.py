@@ -4,4 +4,6 @@
 # Imports
 
 
-__all__ = []
+__all__ = ["stf"]
+
+import customutils.stf.stf
