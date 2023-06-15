@@ -1,4 +1,4 @@
-# Serializable Tree File Format (`STF`) Version a.0.0.3
+# Serializable Tree File Format (`STF`)
 
 A tree-based file format. Leaves are primitive types, branches are descendants of STFObject.
 
