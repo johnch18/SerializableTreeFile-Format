@@ -1,16 +1,45 @@
 #!/usr/bin/python3.11
 
 """
-stf.py
+base.py
 """
-
 
 import hashlib
 # Imports
 from abc import ABC, abstractmethod
-from typing import NamedTuple, Any, Type, IO
+from typing import NamedTuple, Any, Type, IO, Literal
 
-__all__ = ["Configuration", "STFObject", "STFArray", "ByteStream", "SerializedTreeFile"]
+__all__ = ["STFBaseException", "STFBaseCriticalException", "STFBaseNonCriticalException", "STFMagicNumberException", "STFVersionException", "Configuration", "STFObject", "STFArray", "ByteStream", "SerializedTreeFile"]
+
+
+class STFBaseException(Exception, ABC):
+    """
+    Base for the entire hierarchy of exceptions
+    """
+
+
+class STFBaseNonCriticalException(STFBaseException, ABC):
+    """
+    Base for fixable errors
+    """
+
+
+class STFBaseCriticalException(STFBaseException, ABC):
+    """
+    Base for severe errors
+    """
+
+
+class STFMagicNumberException(STFBaseCriticalException):
+    """
+    Indicates bad magic number
+    """
+
+
+class STFVersionException(STFBaseNonCriticalException):
+    """
+    Indicates wrong version
+    """
 
 
 class Configuration:
@@ -28,7 +57,7 @@ class Configuration:
     # Maximum size of a subfield in bytes
     MAX_FIELD_SIZE: int = 4
     # Parity of data
-    ENDIANNESS: str = "big"
+    ENDIANNESS: Literal["little", "big"] = "big"
     # Size of ints in bytes
     INT_SIZE: int = 8
     # Magic number for validation
@@ -47,7 +76,6 @@ class Configuration:
     def version_validation(cls, version: int) -> bool:
         """
         Checks if versions are compatible
-        TODO: Needs some work
         """
         return version == cls.VERSION
 
@@ -58,15 +86,22 @@ class ByteStream(bytearray):
     methods for adding/reading values from a binary array
     """
 
-    def __init__(self, *args, initial_position: int = 0, old_array: bytearray = None, **kwargs):
+    def __init__(self, initial_position: int = 0, old_array: bytearray | str = None):
         """
         Initializer
         """
-        super().__init__(self, *args, **kwargs)
+        super().__init__()
         if old_array:
             # If a bytearray is passed, copy its data
             self.extend(old_array)
-        self.__position = initial_position
+        self.__position: int = initial_position
+        # self.__sub_position: int = 0
+
+    def get_bytes(self) -> bytes:
+        """
+        Converts the ByteStream to bytes
+        """
+        return bytes(self)
 
     def position(self) -> int:
         """
@@ -80,6 +115,7 @@ class ByteStream(bytearray):
         """
         return ByteStream(old_array=self[self.__position:])
 
+    @property
     def length(self) -> int:
         """
         Gets length of data
@@ -98,9 +134,8 @@ class ByteStream(bytearray):
         """
         new_position = self.__position + length
         # Check for over-read
-        if new_position > self.length():
-            raise IndexError(f"Read beyond length of data. Attempted to read {length} bytes" \
-                             " starting at {self.position()}, {new_position} > {self.length()}")
+        if new_position > self.length:
+            raise IndexError(f"Read beyond length of data. Attempted to read {length} bytes starting at {self.position()}, {new_position} > {self.length}")
         new_segment = ByteStream(old_array=self[self.__position: new_position])
         self.__position = new_position
         return new_segment
@@ -108,7 +143,7 @@ class ByteStream(bytearray):
     def read_int(
             self,
             length: int = Configuration.INT_SIZE,
-            byteorder: str = Configuration.ENDIANNESS,
+            byteorder: Literal["little", "big"] = Configuration.ENDIANNESS,
             signed: bool = False
     ):
         """
@@ -134,7 +169,7 @@ class ByteStream(bytearray):
         """
         return bool(self.read(1))
 
-    def write(self, data: bytearray) -> None:
+    def write(self, data: bytearray | bytes) -> None:
         """
         Writes bytes
         """
@@ -143,7 +178,7 @@ class ByteStream(bytearray):
     def write_int(
             self,
             value: int,
-            byteorder: str = Configuration.ENDIANNESS,
+            byteorder: Literal["little", "big"] = Configuration.ENDIANNESS,
             length: int = Configuration.INT_SIZE,
             signed: bool = False
     ) -> None:
@@ -169,7 +204,7 @@ class ByteStream(bytearray):
             self,
             value: bool,
             length: int = Configuration.BOOL_LENGTH,
-            byteorder: str = Configuration.ENDIANNESS,
+            byteorder: Literal["little", "big"] = Configuration.ENDIANNESS,
             signed: bool = False
     ) -> None:
         """
@@ -185,8 +220,7 @@ class ByteStream(bytearray):
         hasher = hashlib.sha256()
         hasher.update(self)
         digest = hasher.digest()
-        hashed = int.from_bytes(digest, Configuration.ENDIANNESS) &\
-                 Configuration.mask_bits(Configuration.INT_SIZE * 8)
+        hashed = int.from_bytes(digest, Configuration.ENDIANNESS) & Configuration.mask_bits(Configuration.INT_SIZE * 8)
         return hashed
 
     @classmethod
@@ -207,7 +241,7 @@ class ByteStream(bytearray):
             raise TypeError(f"Unknown type {type(item).__name__}")
         return result
 
-    def deconvert(self,  *args, target_type: Type = object, **kwargs) -> Any:
+    def deconvert(self, *args, target_type: Type = object, **kwargs) -> Any:
         """
         Converts bytes to a type
         """
@@ -246,13 +280,15 @@ class STFObject(ABC):
     """
     Interface class for STF format
     """
+    requires_header: bool = True
 
     def serialize(self, *args, **kwargs) -> ByteStream:
         """
         Gets a binary representation of the object
         """
         result = ByteStream()
-        result.write(self.header())
+        if self.requires_header:
+            result.write(self.header())
         result.write(self.data(*args, **kwargs))
         return result
 
@@ -263,10 +299,10 @@ class STFObject(ABC):
         result = ByteStream()
         data = self.data()
         result.write_int(value=data.hash())
-        result.write_int(value=data.length(), length=Configuration.MAX_FIELD_SIZE)
+        result.write_int(value=data.length, length=Configuration.MAX_FIELD_SIZE)
         #
         metadata: ByteStream = self.metadata()
-        result.write_int(value=metadata.length(), length=Configuration.METADATA_LENGTH)
+        result.write_int(value=metadata.length, length=Configuration.METADATA_LENGTH)
         result.write(metadata)
         return result
 
@@ -343,13 +379,13 @@ class SerializedTreeFile:
     Reads and writes objects to a tree
     """
 
-    def __init__(self, filename: str, mode: str = "rb") -> None:
+    def __init__(self, filename: str, mode: str = "r") -> None:
         """
         Initializer
         """
         self.filename = filename
-        self.mode = mode
-        self.file: IO = None
+        self.mode = mode + 'b'
+        self.file: IO
 
     def __enter__(self) -> "SerializedTreeFile":
         """
@@ -372,7 +408,7 @@ class SerializedTreeFile:
         data.write_int(Configuration.MAGIC, length=4)
         data.write_int(Configuration.VERSION, length=4)
         data.write(obj.serialize(*args, **kwargs))
-        self.file.write(data)
+        self.file.write(data.get_bytes().decode())
 
     def read(self, target_type: Type[STFObject], *args, **kwargs) -> STFObject:
         """
@@ -382,9 +418,9 @@ class SerializedTreeFile:
         magic = data.read_int(length=4)
         version = data.read_int(length=4)
         if magic != Configuration.MAGIC:
-            raise Exception("Incorrect Magic Number")
-        if version != Configuration.VERSION:
-            raise Exception("Incorrect Version")
+            raise STFMagicNumberException()
+        if not Configuration.version_validation(version):
+            raise STFVersionException()
         return target_type.deserialize(data, *args, **kwargs)
 
 
