@@ -4,11 +4,10 @@
 A test example for STF
 """
 
-
 # Imports
 import random
-from typing import Any, Iterable
 from enum import Enum, auto
+from typing import Any, Iterable
 
 import stf
 
@@ -94,7 +93,7 @@ class Card(stf.STFObject):
         return Card(Card.Suit.get_random(), Card.Rank.get_random())
 
     @classmethod
-    def deserialize(cls, data: stf.ByteStream, *_: Any, **__: Any) -> "stf.STFObject":
+    def deserialize(cls, data: stf.ByteStream, *_: Any, **__: Any) -> "Card":
         """
         Deserializes a card
         """
