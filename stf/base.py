@@ -99,7 +99,7 @@ class ByteStream(bytearray):
     methods for adding/reading values from a binary array
     """
 
-    def __init__(self, initial_position: int = 0, old_array: bytearray | str = None):
+    def __init__(self, initial_position: int = 0, old_array: bytearray | str = None) -> None:
         """
         Initializer
         """
@@ -161,13 +161,13 @@ class ByteStream(bytearray):
             length: int = Configuration.INT_SIZE,
             byteorder: Literal["little", "big"] = Configuration.ENDIANNESS,
             signed: bool = False
-    ):
+    ) -> int:
         """
         Reads an integer
         """
         return int.from_bytes(bytes=self.read(length), byteorder=byteorder, signed=signed)
 
-    def read_str(self, length: int = 0, encoding: str = Configuration.ENCODING):
+    def read_str(self, length: int = 0, encoding: str = Configuration.ENCODING) -> str:
         """
         Reads a string, zero terminated or not
         """
