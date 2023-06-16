@@ -76,7 +76,7 @@ class Configuration:
     # Magic number for validation
     MAGIC: int = 0xDEADBEEF
     # Version
-    VERSION: int = 0x00000003
+    VERSION: int = 0x00000004
 
     @classmethod
     def mask_bits(cls, length: int) -> int:
