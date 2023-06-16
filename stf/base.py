@@ -4,13 +4,16 @@
 base.py
 """
 
-import hashlib
 # Imports
+import hashlib
 from abc import ABC, abstractmethod
-from typing import AnyStr, BinaryIO, NamedTuple, Type, Literal, TypeVar, cast
+from types import TracebackType
+from typing import Any, BinaryIO, Generic, Iterable, List, Literal, NamedTuple, Optional, Self, Type, TypeVar, Union, cast
 
 __all__ = ["STFBaseException", "STFCriticalException", "STFNonCriticalException", "STFUnboundStringException", "STFOverRead", "STFMagicNumberException", "STFVersionException", "STFInvalidTypeException", "Configuration", "Utility",
            "STFObject", "STFArray", "ByteStream", "SerializedTreeFile", "Convertable", "ByteSequence"]
+
+from typing_extensions import SupportsIndex
 
 
 class STFBaseException(Exception, ABC):
@@ -120,8 +123,9 @@ class Utility:
         return (num & 0xF0) >> 4, num & 0x0F
 
 
-Convertable = TypeVar("Convertable", bool, int, str, "STFObject")
-ByteSequence = AnyStr | bytearray
+Convertable = Union[bool, int, str, "STFObject"]
+ConvertableTypes = Union[type[bool], type[int], type[str], type["STFObject"]]
+ByteSequence = Union[bytes, str, bytearray]
 
 
 class ByteStream(bytearray):
@@ -130,14 +134,14 @@ class ByteStream(bytearray):
     methods for adding/reading values from a binary array
     """
 
-    def __init__(self, initial_position: int = 0, old_array: ByteSequence = None) -> None:
+    def __init__(self, initial_position: int = 0, old_array: Optional[ByteSequence] = None) -> None:
         """
         Initializer
         """
         super().__init__()
         if old_array:
             # If a bytearray is passed, copy its data
-            self.extend(old_array)
+            self.extend(cast(bytearray, old_array))
         self.__position: int = initial_position
         # self.__sub_position: int = 0
 
@@ -225,9 +229,9 @@ class ByteStream(bytearray):
         """
         Writes bytes
         """
-        self.extend(data)
+        self.extend(cast(Iterable[SupportsIndex], data))
 
-    def add_obj(self, obj: Convertable, *args, **kwargs) -> None:
+    def add_obj(self, obj: Convertable, *args: Any, **kwargs: Any) -> None:
         """
         Writes an object
         """
@@ -248,7 +252,7 @@ class ByteStream(bytearray):
     def write_str(
             self,
             value: str,
-            zero_terminated=Configuration.ZERO_TERMINATE,
+            zero_terminated: bool = Configuration.ZERO_TERMINATE,
             encoding: str = Configuration.ENCODING
     ) -> None:
         """
@@ -282,7 +286,7 @@ class ByteStream(bytearray):
         return hashed
 
     @classmethod
-    def convert(cls, item: Convertable, *args, **kwargs) -> "ByteStream":
+    def convert(cls, item: Convertable, *args: Any, **kwargs: Any) -> "ByteStream":
         """
         Converts a miscellaneous data type to bytes
         """
@@ -299,7 +303,7 @@ class ByteStream(bytearray):
             raise STFInvalidTypeException(f"Unknown type {type(item).__name__}")
         return result
 
-    def deconvert(self, *args, target_type: Type = Convertable, **kwargs) -> Convertable:
+    def deconvert(self, target_type: ConvertableTypes, *args: Any, **kwargs: Any) -> Convertable:
         """
         Converts bytes to a type
         """
@@ -343,7 +347,7 @@ class STFObject(ABC):
     requires_header: bool = True
     has_metadata: bool = True
 
-    def serialize(self, *args, **kwargs) -> ByteStream:
+    def serialize(self, *args: Any, **kwargs: Any) -> ByteStream:
         """
         Gets a binary representation of the object
         """
@@ -383,13 +387,13 @@ class STFObject(ABC):
 
     @classmethod
     @abstractmethod
-    def deserialize(cls, data: ByteStream, *args, **kwargs) -> "STFObject":
+    def deserialize(cls, data: ByteStream, *args: Any, **kwargs: Any) -> "STFObject":
         """
         Returns an object from bytes
         """
 
     @abstractmethod
-    def data(self, *args, **kwargs) -> ByteStream:
+    def data(self, *args: Any, **kwargs: Any) -> ByteStream:
         """
         Gets bytes of data
         """
@@ -401,32 +405,47 @@ class STFObject(ABC):
         """
 
 
-class STFArray(list, STFObject, ABC):
+T = TypeVar("T", bool, int, str, STFObject)
+
+
+class STFArray(Generic[T], List[T], STFObject, ABC):
     """
     Stores multiple of a single type
     """
     max_elem_field_width: int = 2
-    T: type = None
 
     @classmethod
-    def deserialize(cls, data: ByteStream, *args, **kwargs) -> "STFObject":
+    def get_generic_content(cls) -> type[T]:
+        """
+        Gets the generic type
+        """
+        return cls.__orig_bases__[0].__args__[0]  # type: ignore
+
+    def __getattr__(self, item: Any) -> None:
+        """
+        Does nothing except for shut up pylint
+        """
+        return
+
+    @classmethod
+    def deserialize(cls, data: ByteStream, *args: Any, **kwargs: Any) -> Self:
         """
         Deserialize array
         """
         header = cls.read_header(data)
         num_elems = header.metadata.read_int(length=cls.max_elem_field_width)
-        result = cls(tuple())
+        result: Self = cls(tuple())
         for _ in range(num_elems):
-            result.append(data.deconvert(*args, target_type=cls.T, **kwargs))
+            result.append(cast(T, data.deconvert(cls.get_generic_content(), *args, **kwargs)))
         return cls(result)
 
-    def data(self, *args, **kwargs) -> ByteStream:
+    def data(self, *args: Any, **kwargs: Any) -> ByteStream:
         """
         Get array data
         """
         result = ByteStream()
         for item in self:
-            result.extend(ByteStream.convert(item, *args, **kwargs))
+            result.extend(ByteStream.convert(cast(Convertable, item), *args, **kwargs))
         return result
 
     def metadata(self) -> ByteStream:
@@ -459,13 +478,13 @@ class SerializedTreeFile:
         self.file = cast(BinaryIO, open(self.filename, self.mode))
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(self, exc_type: Type[BaseException], exc_val: BaseException, exc_tb: TracebackType) -> None:
         """
         Closes files
         """
         self.file.close()
 
-    def write(self, obj: STFObject, *args, **kwargs) -> None:
+    def write(self, obj: STFObject, *args: Any, **kwargs: Any) -> None:
         """
         Writes to file
         """
@@ -475,7 +494,7 @@ class SerializedTreeFile:
         data.write(obj.serialize(*args, **kwargs))
         self.file.write(data.get_bytes())
 
-    def read(self, target_type: Type[STFObject], *args, **kwargs) -> STFObject:
+    def read(self, target_type: Type[STFObject], *args: Any, **kwargs: Any) -> STFObject:
         """
         Reads object from file
         """
@@ -492,7 +511,7 @@ class SerializedTreeFile:
 # Testing
 
 
-def main():
+def main() -> None:
     """
     Entry point for testing
     """

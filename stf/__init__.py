@@ -9,7 +9,7 @@ stf
 __all__ = ["base"]
 
 
-def main():
+def main() -> None:
     """
     Main entrypoint
     """

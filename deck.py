@@ -7,12 +7,10 @@ A test example for STF
 
 # Imports
 import random
-from typing import Iterable
+from typing import Any, Iterable
 from enum import Enum, auto
 
 import stf
-
-__all__ = []
 
 
 class Card(stf.STFObject):
@@ -80,8 +78,10 @@ class Card(stf.STFObject):
     def __repr__(self) -> str:
         return str(self)
 
-    def __eq__(self, other: "Card") -> bool:
-        return self.suit == other.suit and self.rank == other.rank
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Card):
+            return self.suit == other.suit and self.rank == other.rank
+        raise TypeError("Invalid type for comparison with card")
 
     def __hash__(self) -> int:
         return hash((self.suit, self.rank))
@@ -94,17 +94,17 @@ class Card(stf.STFObject):
         return Card(Card.Suit.get_random(), Card.Rank.get_random())
 
     @classmethod
-    def deserialize(cls, data: stf.ByteStream, *_, **__) -> "stf.STFObject":
+    def deserialize(cls, data: stf.ByteStream, *_: Any, **__: Any) -> "stf.STFObject":
         """
         Deserializes a card
         """
         value = data.read_int(length=1)
-        suit, rank = stf.Utility.decode_nibbles(value)
-        suit = Card.Suit(suit)
-        rank = Card.Rank(rank)
+        _suit, _rank = stf.Utility.decode_nibbles(value)
+        suit = Card.Suit(_suit)
+        rank = Card.Rank(_rank)
         return Card(suit, rank)
 
-    def data(self, *_, **__) -> stf.ByteStream:
+    def data(self, *_: Any, **__: Any) -> stf.ByteStream:
         """
         Gets the data for serialization
         """
@@ -124,11 +124,10 @@ class Card(stf.STFObject):
 
 
 # pylint: disable=too-few-public-methods
-class Deck(stf.STFArray):
+class Deck(stf.STFArray[Card]):  # type: ignore
     """
     An implementation of an STFArray
     """
-    T: type = Card
 
     max_metadata_size = 1
     max_field_size = 1
@@ -144,7 +143,7 @@ class Deck(stf.STFArray):
         return Deck(deck)
 
 
-def main():
+def main() -> None:
     """
     Test method
     """
