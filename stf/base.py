@@ -179,6 +179,8 @@ class ByteStream(bytearray):
         """
         Reads bytes from the stream, errors if it reads past end, 0 read means read the rest.
         """
+        if length <= 0:
+            return ByteStream()
         new_position = self.__position + length
         # Check for over-read
         if new_position > self.length:
