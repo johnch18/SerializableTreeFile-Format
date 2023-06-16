@@ -377,6 +377,7 @@ class STFObject(ABC):
         """
         Gets header from data
         """
+
         hashed: int = data.read_int()
         size: int = data.read_int(length=cls.max_field_size)
         metadata: ByteStream = ByteStream()
@@ -412,6 +413,7 @@ class STFArray(Generic[T], List[T], STFObject, ABC):
     """
     Stores multiple of a single type
     """
+
     max_elem_field_width: int = 2
 
     @classmethod

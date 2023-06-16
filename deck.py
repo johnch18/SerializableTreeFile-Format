@@ -21,6 +21,7 @@ class Card(stf.STFObject):
         """
         Gets metadata
         """
+
         return stf.ByteStream()
 
     requires_header = False
@@ -29,6 +30,7 @@ class Card(stf.STFObject):
         """
         A suit
         """
+
         HEARTS = 0
         SPADES = auto()
         CLUBS = auto()
@@ -146,6 +148,7 @@ def main() -> None:
     """
     Test method
     """
+
     deck = Deck.get_random()
     print(f"{deck!s}")
     with stf.SerializedTreeFile("deck.stf", "w") as deck_in:
