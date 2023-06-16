@@ -98,8 +98,10 @@ class Card(stf.STFObject):
         """
         Deserializes a card
         """
-        suit = Card.Suit(data.read_int(length=1))
-        rank = Card.Rank(data.read_int(length=1))
+        value = data.read_int(length=1)
+        suit, rank = stf.Utility.decode_nibbles(value)
+        suit = Card.Suit(suit)
+        rank = Card.Rank(rank)
         return Card(suit, rank)
 
     def data(self, *_, **__) -> stf.ByteStream:
@@ -107,8 +109,8 @@ class Card(stf.STFObject):
         Gets the data for serialization
         """
         result = stf.ByteStream()
-        result.write_int(self.suit.value, length=1)
-        result.write_int(self.rank.value, length=1)
+        value = stf.Utility.encode_nibbles(self.suit.value, self.rank.value)
+        result.write_int(value, length=1)
         return result
 
     @classmethod
@@ -128,6 +130,10 @@ class Deck(stf.STFArray):
     """
     T: type = Card
 
+    MAX_METADATA_SIZE = 1
+    MAX_FIELD_SIZE = 1
+    ELEM_FIELD_WIDTH = 1
+
     @classmethod
     def get_random(cls) -> "Deck":
         """
@@ -143,13 +149,14 @@ def main():
     Test method
     """
     deck = Deck.get_random()
-    print(deck)
-    with stf.SerializedTreeFile("deck.stf", "wb") as deck_in:
+    print(f"{deck!s}")
+    with stf.SerializedTreeFile("deck.stf", "w") as deck_in:
         deck_in.write(deck)
+    print(deck.serialize().display())
     #
-    with stf.SerializedTreeFile("deck.stf", "rb") as deck_out:
+    with stf.SerializedTreeFile("deck.stf", "r") as deck_out:
         new_deck = deck_out.read(Deck)
-    print(new_deck)
+    print(f"{new_deck!s}")
 
 
 if __name__ == "__main__":

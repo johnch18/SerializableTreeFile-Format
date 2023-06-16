@@ -7,10 +7,10 @@ base.py
 import hashlib
 # Imports
 from abc import ABC, abstractmethod
-from typing import NamedTuple, Any, Type, IO, Literal
+from typing import BinaryIO, NamedTuple, Any, Type, Literal, cast
 
-__all__ = ["STFBaseException", "STFCriticalException", "STFNonCriticalException", "STFUnboundStringException", "STFOverRead", "STFMagicNumberException", "STFVersionException", "Configuration", "STFObject", "STFArray", "ByteStream",
-           "SerializedTreeFile"]
+__all__ = ["STFBaseException", "STFCriticalException", "STFNonCriticalException", "STFUnboundStringException", "STFOverRead", "STFMagicNumberException", "STFVersionException", "Configuration", "Utility", "STFObject", "STFArray",
+           "ByteStream", "SerializedTreeFile"]
 
 
 class STFBaseException(Exception, ABC):
@@ -55,6 +55,7 @@ class STFOverRead(STFCriticalException):
     """
 
 
+# pylint: disable=too-few-public-methods
 class Configuration:
     """
     Stores relevant constants for the program, I hate magic numbers
@@ -78,19 +79,39 @@ class Configuration:
     # Version
     VERSION: int = 0x00000004
 
-    @classmethod
-    def mask_bits(cls, length: int) -> int:
+
+class Utility:
+    """
+    Stores utility functions
+    """
+
+    @staticmethod
+    def mask_bits(length: int) -> int:
         """
         Filters the lower 'length' bits of an int
         """
         return (1 << length) - 1
 
-    @classmethod
-    def version_validation(cls, version: int) -> bool:
+    @staticmethod
+    def version_validation(version: int) -> bool:
         """
         Checks if versions are compatible
         """
-        return version == cls.VERSION
+        return version == Configuration.VERSION
+
+    @staticmethod
+    def encode_nibbles(first: int, second: int) -> int:
+        """
+        Sticks two small ints into a byte
+        """
+        return ((first & 0x0F) << 4) | (second & 0x0F)
+
+    @staticmethod
+    def decode_nibbles(num: int) -> tuple[int, int]:
+        """
+        Pulls two small ints out of a byte
+        """
+        return (num & 0xF0) >> 4, num & 0x0F
 
 
 class ByteStream(bytearray):
@@ -239,7 +260,7 @@ class ByteStream(bytearray):
         hasher = hashlib.sha256()
         hasher.update(self)
         digest = hasher.digest()
-        hashed = int.from_bytes(digest, Configuration.ENDIANNESS) & Configuration.mask_bits(Configuration.INT_SIZE * 8)
+        hashed = int.from_bytes(digest, Configuration.ENDIANNESS) & Utility.mask_bits(Configuration.INT_SIZE * 8)
         return hashed
 
     @classmethod
@@ -299,6 +320,8 @@ class STFObject(ABC):
     """
     Interface class for STF format
     """
+    MAX_FIELD_SIZE: int = 4
+    MAX_METADATA_SIZE: int = 3
     requires_header: bool = True
 
     def serialize(self, *args, **kwargs) -> ByteStream:
@@ -318,10 +341,10 @@ class STFObject(ABC):
         result = ByteStream()
         data = self.data()
         result.write_int(value=data.hash())
-        result.write_int(value=data.length, length=Configuration.MAX_FIELD_SIZE)
+        result.write_int(value=data.length, length=self.MAX_FIELD_SIZE)
         #
         metadata: ByteStream = self.metadata()
-        result.write_int(value=metadata.length, length=Configuration.METADATA_LENGTH)
+        result.write_int(value=metadata.length, length=self.MAX_METADATA_SIZE)
         result.write(metadata)
         return result
 
@@ -331,8 +354,8 @@ class STFObject(ABC):
         Gets header from data
         """
         hashed: int = data.read_int()
-        size: int = data.read_int(length=Configuration.MAX_FIELD_SIZE)
-        metadata_length: int = data.read_int(length=Configuration.METADATA_LENGTH)
+        size: int = data.read_int(length=cls.MAX_FIELD_SIZE)
+        metadata_length: int = data.read_int(length=cls.MAX_METADATA_SIZE)
         metadata: ByteStream = data.read(length=metadata_length)
         return Header(hashed, size, metadata)
 
@@ -369,8 +392,8 @@ class STFArray(list, STFObject, ABC):
         Deserialize array
         """
         header = cls.read_header(data)
-        num_elems = header.metadata.read_int(length=STFArray.ELEM_FIELD_WIDTH)
-        result = cls(iterable=tuple())
+        num_elems = header.metadata.read_int(length=cls.ELEM_FIELD_WIDTH)
+        result = cls(tuple())
         for _ in range(num_elems):
             result.append(data.deconvert(*args, target_type=cls.T, **kwargs))
         return cls(result)
@@ -389,7 +412,7 @@ class STFArray(list, STFObject, ABC):
         Metadata includes number of elements
         """
         result = ByteStream()
-        result.write_int(len(self), length=STFArray.ELEM_FIELD_WIDTH)
+        result.write_int(len(self), length=self.ELEM_FIELD_WIDTH)
         return result
 
 
@@ -404,13 +427,14 @@ class SerializedTreeFile:
         """
         self.filename = filename
         self.mode = mode + 'b'
-        self.file: IO
+        self.file: BinaryIO
 
     def __enter__(self) -> "SerializedTreeFile":
         """
         Opens file
         """
-        self.file = open(self.filename, self.mode, encoding=Configuration.ENCODING)
+        # pylint: disable=unspecified-encoding
+        self.file = cast(BinaryIO, open(self.filename, self.mode))
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
@@ -427,18 +451,18 @@ class SerializedTreeFile:
         data.write_int(Configuration.MAGIC, length=4)
         data.write_int(Configuration.VERSION, length=4)
         data.write(obj.serialize(*args, **kwargs))
-        self.file.write(data.get_bytes().decode())
+        self.file.write(data.get_bytes())
 
     def read(self, target_type: Type[STFObject], *args, **kwargs) -> STFObject:
         """
         Reads object from file
         """
-        data = ByteStream(old_array=self.file.read())
+        data = ByteStream(old_array=bytearray(self.file.read()))
         magic = data.read_int(length=4)
         version = data.read_int(length=4)
         if magic != Configuration.MAGIC:
             raise STFMagicNumberException()
-        if not Configuration.version_validation(version):
+        if not Utility.version_validation(version):
             raise STFVersionException()
         return target_type.deserialize(data, *args, **kwargs)
 
