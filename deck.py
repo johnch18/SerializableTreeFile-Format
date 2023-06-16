@@ -110,7 +110,7 @@ class Card(stf.STFObject):
         """
         result = stf.ByteStream()
         value = stf.Utility.encode_nibbles(self.suit.value, self.rank.value)
-        result.write_int(value, length=1)
+        result.add_obj(value, length=1)
         return result
 
     @classmethod
@@ -130,9 +130,9 @@ class Deck(stf.STFArray):
     """
     T: type = Card
 
-    MAX_METADATA_SIZE = 1
-    MAX_FIELD_SIZE = 1
-    ELEM_FIELD_WIDTH = 1
+    max_metadata_size = 1
+    max_field_size = 1
+    max_elem_field_width = 1
 
     @classmethod
     def get_random(cls) -> "Deck":
