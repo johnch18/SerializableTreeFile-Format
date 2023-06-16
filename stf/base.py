@@ -7,10 +7,10 @@ base.py
 import hashlib
 # Imports
 from abc import ABC, abstractmethod
-from typing import BinaryIO, NamedTuple, Any, Type, Literal, cast
+from typing import AnyStr, BinaryIO, NamedTuple, Any, Type, Literal, TypeVar, cast
 
-__all__ = ["STFBaseException", "STFCriticalException", "STFNonCriticalException", "STFUnboundStringException", "STFOverRead", "STFMagicNumberException", "STFVersionException", "Configuration", "Utility", "STFObject", "STFArray",
-           "ByteStream", "SerializedTreeFile"]
+__all__ = ["STFBaseException", "STFCriticalException", "STFNonCriticalException", "STFUnboundStringException", "STFOverRead", "STFMagicNumberException", "STFVersionException", "STFInvalidTypeException", "Configuration", "Utility",
+           "STFObject", "STFArray", "ByteStream", "SerializedTreeFile", "Convertable", "ByteSequence"]
 
 
 class STFBaseException(Exception, ABC):
@@ -52,6 +52,12 @@ class STFUnboundStringException(STFCriticalException):
 class STFOverRead(STFCriticalException):
     """
     Read too many bytes
+    """
+
+
+class STFInvalidTypeException(STFCriticalException):
+    """
+    Invalid type for operation
     """
 
 
@@ -114,13 +120,17 @@ class Utility:
         return (num & 0xF0) >> 4, num & 0x0F
 
 
+Convertable = TypeVar("Convertable", bool, int, str, "STFObject")
+ByteSequence = AnyStr | bytearray
+
+
 class ByteStream(bytearray):
     """
     Subclass of the default bytearray that implements convenient
     methods for adding/reading values from a binary array
     """
 
-    def __init__(self, initial_position: int = 0, old_array: bytearray | str = None) -> None:
+    def __init__(self, initial_position: int = 0, old_array: ByteSequence = None) -> None:
         """
         Initializer
         """
@@ -209,11 +219,17 @@ class ByteStream(bytearray):
         """
         return bool(self.read(1))
 
-    def write(self, data: bytearray | bytes) -> None:
+    def write(self, data: ByteSequence) -> None:
         """
         Writes bytes
         """
         self.extend(data)
+
+    def add_obj(self, obj: Convertable, *args, **kwargs) -> None:
+        """
+        Writes an object
+        """
+        self.write(self.convert(obj, *args, **kwargs))
 
     def write_int(
             self,
@@ -264,7 +280,7 @@ class ByteStream(bytearray):
         return hashed
 
     @classmethod
-    def convert(cls, item: Any, *args, **kwargs):
+    def convert(cls, item: Convertable, *args, **kwargs) -> "ByteStream":
         """
         Converts a miscellaneous data type to bytes
         """
@@ -278,10 +294,10 @@ class ByteStream(bytearray):
         elif isinstance(item, bool):
             result.write_bool(item, *args, **kwargs)
         else:
-            raise TypeError(f"Unknown type {type(item).__name__}")
+            raise STFInvalidTypeException(f"Unknown type {type(item).__name__}")
         return result
 
-    def deconvert(self, *args, target_type: Type = object, **kwargs) -> Any:
+    def deconvert(self, *args, target_type: Type = Convertable, **kwargs) -> Any:
         """
         Converts bytes to a type
         """
@@ -293,7 +309,7 @@ class ByteStream(bytearray):
             return self.read_str(*args, **kwargs)
         if issubclass(target_type, bool):
             return self.read_bool()
-        raise TypeError(f"Unknown type {target_type.__name__}")
+        raise STFInvalidTypeException(f"Unknown type {target_type.__name__}")
 
     def display(self, width: int = 8, index_start: int = 0) -> str:
         """
@@ -320,9 +336,10 @@ class STFObject(ABC):
     """
     Interface class for STF format
     """
-    MAX_FIELD_SIZE: int = 4
-    MAX_METADATA_SIZE: int = 3
+    max_field_size: int = 4
+    max_metadata_size: int = 3
     requires_header: bool = True
+    has_metadata: bool = True
 
     def serialize(self, *args, **kwargs) -> ByteStream:
         """
@@ -340,12 +357,13 @@ class STFObject(ABC):
         """
         result = ByteStream()
         data = self.data()
-        result.write_int(value=data.hash())
-        result.write_int(value=data.length, length=self.MAX_FIELD_SIZE)
+        result.add_obj(data.hash())
+        result.add_obj(data.length, length=self.max_field_size)
         #
-        metadata: ByteStream = self.metadata()
-        result.write_int(value=metadata.length, length=self.MAX_METADATA_SIZE)
-        result.write(metadata)
+        if self.has_metadata:
+            metadata: ByteStream = self.metadata()
+            result.add_obj(metadata.length, length=self.max_metadata_size)
+            result.extend(metadata)
         return result
 
     @classmethod
@@ -354,9 +372,11 @@ class STFObject(ABC):
         Gets header from data
         """
         hashed: int = data.read_int()
-        size: int = data.read_int(length=cls.MAX_FIELD_SIZE)
-        metadata_length: int = data.read_int(length=cls.MAX_METADATA_SIZE)
-        metadata: ByteStream = data.read(length=metadata_length)
+        size: int = data.read_int(length=cls.max_field_size)
+        metadata: ByteStream = ByteStream()
+        if cls.has_metadata:
+            metadata_length: int = data.read_int(length=cls.max_metadata_size)
+            metadata = data.read(length=metadata_length)
         return Header(hashed, size, metadata)
 
     @classmethod
@@ -383,7 +403,7 @@ class STFArray(list, STFObject, ABC):
     """
     Stores multiple of a single type
     """
-    ELEM_FIELD_WIDTH: int = 2
+    max_elem_field_width: int = 2
     T: type = None
 
     @classmethod
@@ -392,7 +412,7 @@ class STFArray(list, STFObject, ABC):
         Deserialize array
         """
         header = cls.read_header(data)
-        num_elems = header.metadata.read_int(length=cls.ELEM_FIELD_WIDTH)
+        num_elems = header.metadata.read_int(length=cls.max_elem_field_width)
         result = cls(tuple())
         for _ in range(num_elems):
             result.append(data.deconvert(*args, target_type=cls.T, **kwargs))
@@ -404,7 +424,7 @@ class STFArray(list, STFObject, ABC):
         """
         result = ByteStream()
         for item in self:
-            result.write(ByteStream.convert(item, *args, **kwargs))
+            result.extend(ByteStream.convert(item, *args, **kwargs))
         return result
 
     def metadata(self) -> ByteStream:
@@ -412,7 +432,7 @@ class STFArray(list, STFObject, ABC):
         Metadata includes number of elements
         """
         result = ByteStream()
-        result.write_int(len(self), length=self.ELEM_FIELD_WIDTH)
+        result.add_obj(len(self), length=self.max_elem_field_width)
         return result
 
 
