@@ -360,7 +360,7 @@ class STFArray(list, STFObject, ABC):
     """
     Stores multiple of a single type
     """
-    MAX_ELEMS: int = 2
+    ELEM_FIELD_WIDTH: int = 2
     T: type = None
 
     @classmethod
@@ -369,7 +369,7 @@ class STFArray(list, STFObject, ABC):
         Deserialize array
         """
         header = cls.read_header(data)
-        num_elems = header.metadata.read_int(length=STFArray.MAX_ELEMS)
+        num_elems = header.metadata.read_int(length=STFArray.ELEM_FIELD_WIDTH)
         result = cls(iterable=tuple())
         for _ in range(num_elems):
             result.append(data.deconvert(*args, target_type=cls.T, **kwargs))
@@ -389,7 +389,7 @@ class STFArray(list, STFObject, ABC):
         Metadata includes number of elements
         """
         result = ByteStream()
-        result.write_int(len(self), length=STFArray.MAX_ELEMS)
+        result.write_int(len(self), length=STFArray.ELEM_FIELD_WIDTH)
         return result
 
 
