@@ -9,7 +9,8 @@ import hashlib
 from abc import ABC, abstractmethod
 from typing import NamedTuple, Any, Type, IO, Literal
 
-__all__ = ["STFBaseException", "STFBaseCriticalException", "STFBaseNonCriticalException", "STFMagicNumberException", "STFVersionException", "Configuration", "STFObject", "STFArray", "ByteStream", "SerializedTreeFile"]
+__all__ = ["STFBaseException", "STFCriticalException", "STFNonCriticalException", "STFUnboundStringException", "STFOverRead", "STFMagicNumberException", "STFVersionException", "Configuration", "STFObject", "STFArray", "ByteStream",
+           "SerializedTreeFile"]
 
 
 class STFBaseException(Exception, ABC):
@@ -18,27 +19,39 @@ class STFBaseException(Exception, ABC):
     """
 
 
-class STFBaseNonCriticalException(STFBaseException, ABC):
+class STFNonCriticalException(STFBaseException, ABC):
     """
     Base for fixable errors
     """
 
 
-class STFBaseCriticalException(STFBaseException, ABC):
+class STFCriticalException(STFBaseException, ABC):
     """
     Base for severe errors
     """
 
 
-class STFMagicNumberException(STFBaseCriticalException):
+class STFMagicNumberException(STFCriticalException):
     """
     Indicates bad magic number
     """
 
 
-class STFVersionException(STFBaseNonCriticalException):
+class STFVersionException(STFCriticalException):
     """
     Indicates wrong version
+    """
+
+
+class STFUnboundStringException(STFCriticalException):
+    """
+    Unterminated String
+    """
+
+
+class STFOverRead(STFCriticalException):
+    """
+    Read too many bytes
     """
 
 
@@ -103,12 +116,14 @@ class ByteStream(bytearray):
         """
         return bytes(self)
 
+    @property
     def position(self) -> int:
         """
         Current position in stream
         """
         return self.__position
 
+    @property
     def remaining(self) -> "ByteStream":
         """
         Unread bytes
@@ -122,6 +137,7 @@ class ByteStream(bytearray):
         """
         return len(self)
 
+    @property
     def remaining_length(self) -> int:
         """
         Length of unread segment
@@ -135,7 +151,7 @@ class ByteStream(bytearray):
         new_position = self.__position + length
         # Check for over-read
         if new_position > self.length:
-            raise IndexError(f"Read beyond length of data. Attempted to read {length} bytes starting at {self.position()}, {new_position} > {self.length}")
+            raise STFOverRead(f"Read beyond length of data. Attempted to read {length} bytes starting at {self.position}, {new_position} > {self.length}")
         new_segment = ByteStream(old_array=self[self.__position: new_position])
         self.__position = new_position
         return new_segment
@@ -157,7 +173,10 @@ class ByteStream(bytearray):
         """
         if length > 0:
             return self.read(length).decode(encoding=encoding)
-        zero_index = self.index(0x00, self.__position) - self.__position
+        try:
+            zero_index = self.index(0x00, self.__position) - self.__position
+        except ValueError as _:
+            raise STFUnboundStringException from _
         result = self.read_str(zero_index)
         # Ignore zero
         self.read(1)
