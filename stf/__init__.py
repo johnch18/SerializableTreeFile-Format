@@ -6,7 +6,7 @@ __init__.py
 stf
 """
 
-__all__ = ["base"]
+__all__: list[str] = []
 
 
 def main() -> None:
@@ -18,4 +18,4 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 else:
-    from stf.base import *
+    pass
